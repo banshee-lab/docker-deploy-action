@@ -74,19 +74,61 @@ runs:
       if: ${{ success() }}
       shell: bash
       run: |
-        PAYLOAD=$(jq -n \
-          --arg ref "${{ github.ref }}" \
-          --arg repo "${{ github.repository }}" \
-          --arg msg "${{ inputs.commit_message }}" \
-          '{ref: $ref, repository: {full_name: $repo}, head_commit: {message: $msg}}')
+        PAYLOG_REF="refs/heads/${{ github.ref_name }}"
+        if [ "${{ github.ref_type }}" = "tag" ]; then
+          PAYLOG_REF="refs/tags/${{ github.ref_name }}"
+        fi
 
-        SIGNATURE="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ inputs.webhook_secret }}" -binary | xxd -p -c 256)"
-        curl -s -X POST "${{ inputs.webhook_url }}" \
-          -H "Content-Type: application/json" \
-          -H "X-GitHub-Event: push" \
-          -H "X-Hub-Signature-256: $SIGNATURE" \
-          -H "User-Agent: GitHub-Hookshot" \
-          -d "$PAYLOAD"
+        PAYLOAD=$(cat <<EOF
+        {
+          "ref": "$PAYLOG_REF",
+          "before": "0000000000000000000000000000000000000000",
+          "after": "${{ github.sha }}",
+          "action": "completed",
+          "workflow_run": {
+            "id": ${{ github.run_id }},
+            "name": "${{ github.workflow }}",
+            "head_branch": "${{ github.ref_name }}",
+            "head_sha": "${{ github.sha }}",
+            "status": "completed",
+            "conclusion": "success",
+            "event": "${{ github.event_name }}",
+            "html_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          },
+          "repository": {
+            "id": ${{ github.repository_id || 0 }},
+            "name": "${{ github.event.repository.name }}",
+            "full_name": "${{ github.repository }}"
+          },
+          "sender": {
+            "login": "${{ github.actor }}"
+          }
+        }
+        EOF
+        )
+
+        DELIVERY_ID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || date +%s)
+        SIGNATURE="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ inputs.webhook_secret }}" | sed 's/.*= //')"
+
+        CURL_ARGS="-X POST \"${{ inputs.webhook_url }}\" \
+          -H \"Content-Type: application/json\" \
+          -H \"User-Agent: GitHub-Hookshot/antigravity\" \
+          -H \"X-GitHub-Event: workflow_run\" \
+          -H \"X-GitHub-Delivery: $DELIVERY_ID\" \
+          -H \"X-Hub-Signature-256: $SIGNATURE\" \
+          -d '$PAYLOAD'"
+
+        HTTP_RESPONSE=$(sh -c "curl -s -w '\n%{http_code}' $CURL_ARGS")
+        HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+        HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+
+        echo "HTTP Status Code: $HTTP_STATUS"
+        echo "Response Body:"
+        echo "$HTTP_BODY"
+
+        if [ "$HTTP_STATUS" -ge 400 ]; then
+          exit 1
+        fi
 
     - name: Send success notification
       if: ${{ success() }}
