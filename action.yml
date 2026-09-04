@@ -79,9 +79,9 @@ runs:
         REF_NAME: ${{ github.ref_name }}
         REF_TYPE: ${{ github.ref_type }}
       run: |
-        PAYLOG_REF="heads/${REF_NAME}"
+        PAYLOG_REF="refs/heads/${REF_NAME}"
         if [ "$REF_TYPE" = "tag" ]; then
-          PAYLOG_REF="tags/${REF_NAME}"
+          PAYLOG_REF="refs/tags/${REF_NAME}"
         fi
 
         PAYLOAD=$(cat <<EOF
@@ -102,7 +102,7 @@ runs:
           -X POST "$WEBHOOK_URL" \
           -H "Content-Type: application/json" \
           -H "User-Agent: GitHub-Hookshot/antigravity" \
-          -H "X-GitHub-Event: workflow_run" \
+          -H "X-GitHub-Event: push" \
           -H "X-GitHub-Delivery: $DELIVERY_ID" \
           -H "X-Hub-Signature-256: $SIGNATURE" \
           -d "$PAYLOAD")
