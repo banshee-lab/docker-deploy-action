@@ -85,6 +85,7 @@ runs:
           -H "Content-Type: application/json" \
           -H "X-GitHub-Event: push" \
           -H "X-Hub-Signature-256: $SIGNATURE" \
+          -H "User-Agent: GitHub-Hookshot" \
           -d "$PAYLOAD"
 
     - name: Send success notification
