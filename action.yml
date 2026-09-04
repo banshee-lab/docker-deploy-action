@@ -20,12 +20,18 @@ inputs:
     description: 'Docker build context'
     required: false
     default: '.'
-  webhook_url:
-    description: 'Deployment webhook URL'
+  komodo_address:
+    description: 'Komodo URL'
     required: true
-  webhook_secret:
-    description: 'Deployment webhook Secret'
-    required: true    
+  komodo_api_key:
+    description: 'Komodo API Key'
+    required: true
+  komodo_api_secret:
+    description: 'Komodo API Secret'
+    required: true     
+  stack_name:
+    description: 'Komodo Stack Name'
+    required: true     
   telegram_token:
     description: 'Telegram bot token'
     required: true
@@ -70,42 +76,21 @@ runs:
         push: true
         tags: ${{ steps.get-tag.outputs.tag }}
 
-    - name: Invoke deployment Webhook
+    - name: Force Komodo stack deploy
       if: ${{ success() }}
       shell: bash
       env:
-        WEBHOOK_URL: ${{ inputs.webhook_url }}
-        WEBHOOK_SECRET: ${{ inputs.webhook_secret }}
-        REF_NAME: ${{ github.ref_name }}
-        REF_TYPE: ${{ github.ref_type }}
+        KOMODO_ADDRESS: ${{ inputs.komodo_address }}
+        KOMODO_API_KEY: ${{ inputs.komodo_api_key }}
+        KOMODO_API_SECRET: ${{ inputs.komodo_api_secret }}
+        STACK_NAME: ${{ inputs.stack_name }}
       run: |
-        PAYLOG_REF="refs/heads/${REF_NAME}"
-        if [ "$REF_TYPE" = "tag" ]; then
-          PAYLOG_REF="refs/tags/${REF_NAME}"
-        fi
-
-        PAYLOAD=$(cat <<EOF
-        {
-          "ref": "$PAYLOG_REF"
-        }
-        EOF
-        )
-
-        echo "------- PAYLOAD -------"
-        printf '%s\n' "$PAYLOAD"
-        echo "-----------------------"
-
-        DELIVERY_ID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || date +%s)
-        SIGNATURE="sha256=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | sed 's/.*= //')"
-
         HTTP_RESPONSE=$(curl -s -w '\n%{http_code}' \
-          -X POST "$WEBHOOK_URL" \
+          -X POST "$KOMODO_ADDRESS/execute/DeployStack" \
           -H "Content-Type: application/json" \
-          -H "User-Agent: GitHub-Hookshot/antigravity" \
-          -H "X-GitHub-Event: push" \
-          -H "X-GitHub-Delivery: $DELIVERY_ID" \
-          -H "X-Hub-Signature-256: $SIGNATURE" \
-          -d "$PAYLOAD")
+          -H "X-Api-Key: $KOMODO_API_KEY" \
+          -H "X-Api-Secret: $KOMODO_API_SECRET" \
+          -d "{\"stack\": \"$STACK_NAME\"}")
 
         HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
         HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
@@ -114,7 +99,9 @@ runs:
         echo "Response Body:"
         echo "$HTTP_BODY"
 
-        if [ "$HTTP_STATUS" -ge 400 ]; then
+        SUCCESS=$(echo "$HTTP_BODY" | jq -r '.success // empty')
+        if [ "$SUCCESS" = "false" ]; then
+          echo "Komodo deploy reported failure"
           exit 1
         fi
 
