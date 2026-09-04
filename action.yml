@@ -74,38 +74,21 @@ runs:
       if: ${{ success() }}
       shell: bash
       run: |
-        PAYLOG_REF="refs/heads/${{ github.ref_name }}"
+        PAYLOG_REF="heads/${{ github.ref_name }}"
         if [ "${{ github.ref_type }}" = "tag" ]; then
-          PAYLOG_REF="refs/tags/${{ github.ref_name }}"
+          PAYLOG_REF="tags/${{ github.ref_name }}"
         fi
 
         PAYLOAD=$(cat <<EOF
         {
           "ref": "$PAYLOG_REF",
-          "before": "0000000000000000000000000000000000000000",
-          "after": "${{ github.sha }}",
-          "action": "completed",
-          "workflow_run": {
-            "id": ${{ github.run_id }},
-            "name": "${{ github.workflow }}",
-            "head_branch": "${{ github.ref_name }}",
-            "head_sha": "${{ github.sha }}",
-            "status": "completed",
-            "conclusion": "success",
-            "event": "${{ github.event_name }}",
-            "html_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          },
-          "repository": {
-            "id": ${{ github.repository_id || 0 }},
-            "name": "${{ github.event.repository.name }}",
-            "full_name": "${{ github.repository }}"
-          },
-          "sender": {
-            "login": "${{ github.actor }}"
-          }
         }
         EOF
         )
+
+        echo "------- PAYLOAD -------"
+        echo "$PAYLOAD"
+        echo "-----------------------"       
 
         DELIVERY_ID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || date +%s)
         SIGNATURE="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ inputs.webhook_secret }}" | sed 's/.*= //')"
