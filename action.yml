@@ -23,6 +23,9 @@ inputs:
   webhook_url:
     description: 'Deployment webhook URL'
     required: true
+  webhook_secret:
+    description: 'Deployment webhook Secret'
+    required: true    
   telegram_token:
     description: 'Telegram bot token'
     required: true
@@ -72,6 +75,7 @@ runs:
       uses: distributhor/workflow-webhook@v3
       with:
         webhook_url: ${{ inputs.webhook_url }}
+        webhook_secret: ${{ inputs.webhook_secret }}        
 
     - name: Send success notification
       if: ${{ success() }}
