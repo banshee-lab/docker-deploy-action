@@ -14,7 +14,8 @@ inputs:
     required: true
   image_tag:
     description: 'Full image tag (e.g., ghcr.io/user/repo:latest)'
-    required: true
+    required: false
+    default: ''
   context:
     description: 'Docker build context'
     required: false
@@ -64,7 +65,7 @@ runs:
       with:
         context: ${{ inputs.context }}
         push: true
-        tags: ${{ inputs.image_tag }}
+        tags: ${{ steps.get-tag.outputs.tag }}
 
     - name: Invoke deployment hook
       if: ${{ success() }}
@@ -86,4 +87,4 @@ runs:
       with:
         to: ${{ inputs.telegram_to }}
         token: ${{ inputs.telegram_token }}
-        message: Build failed "${{ inputs.commit_message }}"        
+        message: Build failed "${{ inputs.commit_message }}"
