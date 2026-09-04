@@ -73,35 +73,40 @@ runs:
     - name: Invoke deployment Webhook
       if: ${{ success() }}
       shell: bash
+      env:
+        WEBHOOK_URL: ${{ inputs.webhook_url }}
+        WEBHOOK_SECRET: ${{ inputs.webhook_secret }}
+        REF_NAME: ${{ github.ref_name }}
+        REF_TYPE: ${{ github.ref_type }}
       run: |
-        PAYLOG_REF="heads/${{ github.ref_name }}"
-        if [ "${{ github.ref_type }}" = "tag" ]; then
-          PAYLOG_REF="tags/${{ github.ref_name }}"
+        PAYLOG_REF="heads/${REF_NAME}"
+        if [ "$REF_TYPE" = "tag" ]; then
+          PAYLOG_REF="tags/${REF_NAME}"
         fi
 
         PAYLOAD=$(cat <<EOF
         {
-          "ref": "$PAYLOG_REF",
+          "ref": "$PAYLOG_REF"
         }
         EOF
         )
 
         echo "------- PAYLOAD -------"
-        echo "$PAYLOAD"
-        echo "-----------------------"       
+        printf '%s\n' "$PAYLOAD"
+        echo "-----------------------"
 
         DELIVERY_ID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || date +%s)
-        SIGNATURE="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "${{ inputs.webhook_secret }}" | sed 's/.*= //')"
+        SIGNATURE="sha256=$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | sed 's/.*= //')"
 
-        CURL_ARGS="-X POST \"${{ inputs.webhook_url }}\" \
-          -H \"Content-Type: application/json\" \
-          -H \"User-Agent: GitHub-Hookshot/antigravity\" \
-          -H \"X-GitHub-Event: workflow_run\" \
-          -H \"X-GitHub-Delivery: $DELIVERY_ID\" \
-          -H \"X-Hub-Signature-256: $SIGNATURE\" \
-          -d '$PAYLOAD'"
+        HTTP_RESPONSE=$(curl -s -w '\n%{http_code}' \
+          -X POST "$WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -H "User-Agent: GitHub-Hookshot/antigravity" \
+          -H "X-GitHub-Event: workflow_run" \
+          -H "X-GitHub-Delivery: $DELIVERY_ID" \
+          -H "X-Hub-Signature-256: $SIGNATURE" \
+          -d "$PAYLOAD")
 
-        HTTP_RESPONSE=$(sh -c "curl -s -w '\n%{http_code}' $CURL_ARGS")
         HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
         HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
 
