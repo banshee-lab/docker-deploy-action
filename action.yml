@@ -36,6 +36,22 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Determine Image Tag
+      id: get-tag
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.image_tag }}" ]; then
+          if [ -z "${{ inputs.registry }}" ]; then
+            AUTO_TAG="${{ github.repository }}:latest"
+          else
+            AUTO_TAG="${{ inputs.registry }}/${{ github.repository }}:latest"
+          fi
+          echo "tag=$AUTO_TAG" >> $GITHUB_OUTPUT
+          echo "Using auto-generated tag: $AUTO_TAG"
+        else
+          echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          echo "Using provided tag: ${{ inputs.image_tag }}"
+        fi  
     - name: Log in to Container Registry
       uses: docker/login-action@v4
       with:
